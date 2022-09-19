@@ -22,12 +22,35 @@ limitations under the License.
 # Package filtering and output improvements by Jake Wharton, http://jakewharton.com
 
 import argparse
+import os
 import sys
 import re
 import subprocess
 from subprocess import PIPE
+import ctypes
 
-__version__ = '2.1.0'
+if not (sys.version_info.major >= 3 and sys.version_info.minor >= 6):
+  print('Require python version: 3.6+')
+  sys.exit(-1)
+
+__version__ = '3.0.0'
+
+def enableVT100():
+  STD_OUTPUT_HANDLE = -11
+  ENABLE_VIRTUAL_TERMINAL_PROCESSING = 4
+  stdout = ctypes.windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+  if stdout == -1:
+    raise ctypes.WinError()
+  mode = ctypes.c_uint()
+  if ctypes.windll.kernel32.GetConsoleMode(stdout, ctypes.byref(mode)) == 0:
+    raise ctypes.WinError()
+  mode.value = mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING
+  if ctypes.windll.kernel32.SetConsoleMode(stdout, mode) == 0:
+    raise ctypes.WinError()
+
+if os.name == 'nt':
+  enableVT100()
+
 
 LOG_LEVELS = 'VDIWEF'
 LOG_LEVELS_MAP = dict([(LOG_LEVELS[i], i) for i in range(len(LOG_LEVELS))])
@@ -61,10 +84,15 @@ if args.use_emulator:
   base_adb_command.append('-e')
 
 if args.current_app:
-  system_dump_command = base_adb_command + ["shell", "dumpsys", "activity", "activities"]
+  system_dump_command = base_adb_command + ["shell", "dumpsys", "activity", "recents"]
   system_dump = subprocess.Popen(system_dump_command, stdout=PIPE, stderr=PIPE).communicate()[0]
-  running_package_name = re.search(".*TaskRecord.*A[= ]([^ ^}]*)", str(system_dump)).group(1)
-  package.append(running_package_name)
+  dump_str = bytes.decode(system_dump, 'utf-8')
+  match_obj = re.search(r"\* Recent #0: Task.* type=([^ ]+) .*A=\d+:([^ ]+)", dump_str)
+  activity_type = match_obj.group(1)
+  running_package_name = match_obj.group(2)
+  if activity_type != 'home':
+    print(f'running package name: {running_package_name}')
+    package.append(running_package_name)
 
 if len(package) == 0:
   args.all = True
@@ -359,4 +387,4 @@ while adb.poll() is None:
     message = matcher.sub(replace, message)
 
   linebuf += indent_wrap(message)
-  print(linebuf.encode('utf-8'))
+  print(linebuf)
