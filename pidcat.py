@@ -22,6 +22,8 @@ limitations under the License.
 # Package filtering and output improvements by Jake Wharton, http://jakewharton.com
 
 import argparse
+from genericpath import isfile
+from pathlib import Path
 import os
 import sys
 import re
@@ -74,11 +76,20 @@ parser.add_argument('-a', '--all', dest='all', action='store_true', default=Fals
 args = parser.parse_args()
 min_level = LOG_LEVELS_MAP[args.min_level.upper()]
 
+if subprocess.check_output(['adb', 'devices'], universal_newlines=True).count('device') <= 1:
+  print('no android device attached')
+  sys.exit(-1)
+
 package = args.package
 
 base_adb_command = ['adb']
 if args.device_serial:
   base_adb_command.extend(['-s', args.device_serial])
+elif os.path.isfile(os.path.join(Path.home(), '.android_default_device')):
+  device = Path(os.path.join(Path.home(), '.android_default_device')).read_text().rstrip()
+  print(f'device is {device}')
+  base_adb_command.extend(['-s', device])
+
 if args.use_device:
   base_adb_command.append('-d')
 if args.use_emulator:
@@ -182,7 +193,7 @@ def allocate_tid_color(tid, is_main_tid):
     TID_LAST_USED.remove(color)
     TID_LAST_USED.append(color)
   return color
-  
+
 
 RULES = {
   # StrictMode policy violation; ~duration=319 ms: android.os.StrictMode$StrictModeDiskWriteViolation: policy=31 violation=1
