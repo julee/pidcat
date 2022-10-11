@@ -48,8 +48,8 @@ def enableVT100():
   if ctypes.windll.kernel32.SetConsoleMode(stdout, mode) == 0:
     raise ctypes.WinError()
 
-if os.name == 'nt':
-  enableVT100()
+#if os.name == 'nt':
+#  enableVT100()
 
 
 LOG_LEVELS = 'VDIWEF'
