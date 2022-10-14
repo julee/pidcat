@@ -100,6 +100,9 @@ if args.current_app:
   system_dump = subprocess.Popen(system_dump_command, stdout=PIPE, stderr=PIPE).communicate()[0]
   dump_str = bytes.decode(system_dump, 'utf-8')
   match_obj = re.search(r"\* Recent #0: Task.* type=([^ ]+) .*A=\d+:([^ ]+)", dump_str)
+  if match_obj == None:
+    print('screen off ? exit.')
+    sys.exit(-1)
   activity_type = match_obj.group(1)
   running_package_name = match_obj.group(2)
   if activity_type != 'home':
