@@ -24,6 +24,7 @@ limitations under the License.
 import argparse
 from genericpath import isfile
 from pathlib import Path
+from datetime import datetime
 import os
 import sys
 import re
@@ -61,6 +62,8 @@ parser.add_argument('package', nargs='*', help='Application package name(s)')
 parser.add_argument('-w', '--tag-width', metavar='N', dest='tag_width', type=int, default=13, help='Width of log tag')
 parser.add_argument('-l', '--min-level', dest='min_level', type=str, choices=LOG_LEVELS+LOG_LEVELS.lower(), default='V', help='Minimum level to be displayed')
 parser.add_argument('--color-gc', dest='color_gc', action='store_true', help='Color garbage collection')
+parser.add_argument('-f', '--file', type=str, help='adb raw output append to file')
+parser.add_argument('-g', '--always-color', dest='always_color', action='store_true',default=False, help='If output to terminal, not corlored by default. With this option, always keep color(use for command like: pidcat | tee logfile)')
 parser.add_argument('--always-display-tags', dest='always_tags', action='store_true',help='Always display the tag name')
 parser.add_argument('--current', dest='current_app', action='store_true',help='Filter logcat by current running app')
 parser.add_argument('-s', '--serial', dest='device_serial', help='Device serial number (adb -s option)')
@@ -112,6 +115,19 @@ if args.current_app:
 if len(package) == 0:
   args.all = True
 
+raw_file = None
+if args.file:
+  append = os.path.isfile(args.file)
+  raw_file = open(args.file, 'a')
+  if append:
+    raw_file.write('\n' * 10)
+    raw_file.write('=' * 80)
+    raw_file.write('\n')
+  raw_file.write(datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S') + '\n')
+  raw_file.write(' '.join(sys.argv) + '\n')
+  raw_file.write('raw log: \n')
+  raw_file.write('\n')
+
 # Store the names of packages for which to match all processes.
 catchall_package = list(filter(lambda package: package.find(":") == -1, package))
 # Store the name of processes to match exactly.
@@ -142,7 +158,7 @@ def termcolor(fg=None, bg=None):
   return '\033[%sm' % ';'.join(codes) if codes else ''
 
 def colorize(message, fg=None, bg=None):
-  return termcolor(fg, bg) + message + RESET if stdout_isatty else message
+  return termcolor(fg, bg) + message + RESET if stdout_isatty or args.always_color else message
 
 def indent_wrap(message):
   if width == -1:
@@ -439,3 +455,6 @@ while adb.poll() is None:
 
   linebuf += indent_wrap(message)
   print(linebuf)
+  if raw_file != None:
+    raw_file.write(line)
+    raw_file.write('\n')
