@@ -118,7 +118,7 @@ if len(package) == 0:
 raw_file = None
 if args.file:
   append = os.path.isfile(args.file)
-  raw_file = open(args.file, 'a')
+  raw_file = open(args.file, 'a', encoding='utf-8')
   if append:
     raw_file.write('\n' * 10)
     raw_file.write('=' * 80)
