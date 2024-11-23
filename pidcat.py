@@ -54,6 +54,7 @@ def enableVT100():
 #if os.name == 'nt':
 #  enableVT100()
 
+TID_WDITH = 6
 
 LOG_LEVELS = 'VDIWEF'
 LOG_LEVELS_MAP = dict([(LOG_LEVELS[i], i) for i in range(len(LOG_LEVELS))])
@@ -74,6 +75,7 @@ parser.add_argument('-t', '--tag', dest='tag', action='append', help='Filter out
 parser.add_argument('-i', '--ignore-tag', dest='ignored_tag', action='append', help='Filter output by ignoring specified tag(s)')
 parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + __version__, help='Print the version number and exit')
 parser.add_argument('--time', dest='time', action='store_true', default=False, help='Print time and thread')
+parser.add_argument('-W', '--nolinewrap', dest='no_line_wrap', action='store_true', default=False, help='disable line wrap')
 parser.add_argument('-a', '--all', dest='all', action='store_true', default=False, help='Print all log messages')
 
 args = parser.parse_args()
@@ -135,17 +137,19 @@ named_processes = list(filter(lambda package: package.find(":") != -1, package))
 # Convert default process names from <package>: (cli notation) to <package> (android notation) in the exact names match group.
 named_processes = map(lambda package: package if package.find(":") != len(package) - 1 else package[:-1], named_processes)
 
-header_size = args.tag_width + 1 + 3 + 1 # space, level, space
+fixed_header_size = args.tag_width + 1 + 3 + 1 + (TID_WDITH + 2) # space, level, space
+header_size = args.tag_width + 1 + 3 + 1 + (TID_WDITH + 2) # space, level, space
 
 stdout_isatty = sys.stdout.isatty()
 
 width = -1
-try:
-  # Get the current terminal width
-  import fcntl, termios, struct
-  h, width = struct.unpack('hh', fcntl.ioctl(0, termios.TIOCGWINSZ, struct.pack('hh', 0, 0)))
-except:
-  pass
+if not args.no_line_wrap:
+  try:
+    # Get the current terminal width
+    import fcntl, termios, struct
+    h, width = struct.unpack('hh', fcntl.ioctl(0, termios.TIOCGWINSZ, struct.pack('hh', 0, 0)))
+  except:
+    pass
 
 BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE = range(8)
 
@@ -246,7 +250,7 @@ PID_KILL  = re.compile(r'^.*Killing (\d+):([a-zA-Z0-9._:]+)/[^:]+: (.*)$')
 PID_LEAVE = re.compile(r'^.*No longer want ([a-zA-Z0-9._:]+) \(pid (\d+)\): .*$')
 PID_DEATH = re.compile(r'^.*Process ([a-zA-Z0-9._:]+) \(pid (\d+)\) has died.?$')
 LOG_LINE_PREFIX = r'^(\d+-\d+\s+\d+:\d+:\d+\.\d+)\s+(\d+)\s+(\d+)\s+?'
-LOG_LINE  = re.compile(LOG_LINE_PREFIX + r'([A-Z])\s+(.+?): (.*?)$')
+LOG_LINE  = re.compile(LOG_LINE_PREFIX + r'([A-Z])\s(.+?): ?(.*?)$')
 BUG_LINE  = re.compile(r'.*nativeGetEnabledTags.*')
 BACKTRACE_LINE = re.compile(r'^#(.*?)pc\s(.*?)$')
 
@@ -272,10 +276,13 @@ class FakeStdinProcess():
 
 if sys.stdin.isatty():
   adb = subprocess.Popen(adb_command, stdin=PIPE, stdout=PIPE)
+  # fake_cmd = ['cat', '/Users/julee/Documents/code/pidcat/logNoDisplay.txt']
+  # adb = subprocess.Popen(fake_cmd, stdin=PIPE, stdout=PIPE)
 else:
   adb = FakeStdinProcess()
 pids = set()
 last_tid = None
+last_owner = None
 app_pid = None
 last_tag = None
 tid_color_dict = {}
@@ -329,7 +336,6 @@ def parse_start_proc(line):
 def tag_in_tags_regex(tag, tags):
   return any(re.match(r'^' + t + r'$', tag) for t in map(str.strip, tags))
 
-TID_WDITH = 6
 def padding_tid(tid: str):
   return ' ' * (TID_WDITH - len(tid)) + tid
 
@@ -371,7 +377,9 @@ while adb.poll() is None:
   is_main_thread = owner == tid
   if line_time and len(line_time) > 6:
     line_time = line_time[6:]
-  tid = padding_tid(tid)
+  if line_time and args.time:
+    header_size = fixed_header_size + len(line_time) + 2
+  tid_str = padding_tid(tid)
   tag = tag.strip()
   start = parse_start_proc(line)
   if start:
@@ -391,6 +399,7 @@ while adb.poll() is None:
       print(linebuf)
       last_tag = None # Ensure next log gets a tag printed
       last_tid = None # Ensure next log gets a tag printed
+      last_owner = None
       tid_color_dict = {}
 
   dead_pid, dead_pname = parse_death(tag, message)
@@ -403,6 +412,7 @@ while adb.poll() is None:
     print(linebuf)
     last_tag = None # Ensure next log gets a tag printed
     last_tid = None # Ensure next log gets a tag printed
+    last_owner = None
     tid_color_dict = {}
 
   # Make sure the backtrace is printed after a native crash
@@ -434,12 +444,13 @@ while adb.poll() is None:
       linebuf += ' ' * args.tag_width
     linebuf += ' '
 
-  if tid != last_tid:
+  if tid != last_tid or owner != last_owner:
     last_tid = tid
+    last_owner = owner
     color = allocate_tid_color(tid, is_main_thread)
-    linebuf += ' ' + colorize(tid, fg=color) + ' '
+    linebuf += ' ' + colorize(tid_str, fg=color) + ' '
   else:
-    linebuf += ' ' + ' ' * len(tid) + ' '
+    linebuf += ' ' + ' ' * len(tid_str) + ' '
 
   # write out level colored edge
   if level in TAGTYPES:
