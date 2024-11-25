@@ -104,7 +104,7 @@ if args.current_app:
   system_dump_command = base_adb_command + ["shell", "dumpsys", "activity", "recents"]
   system_dump = subprocess.Popen(system_dump_command, stdout=PIPE, stderr=PIPE).communicate()[0]
   dump_str = bytes.decode(system_dump, 'utf-8')
-  match_obj = re.search(r"\* Recent #0: Task.* type=([^ ]+) .*A=\d+:([^ ]+)", dump_str)
+  match_obj = re.search(r"\* Recent #0: Task.* type=([^ ]+) .*A=\d+:([a-zA-Z0-9._$-]+)", dump_str)
   if match_obj == None:
     print('screen off ? exit.')
     sys.exit(-1)
