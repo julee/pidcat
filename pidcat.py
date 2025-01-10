@@ -77,11 +77,12 @@ parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + _
 parser.add_argument('--time', dest='time', action='store_true', default=False, help='Print time and thread')
 parser.add_argument('-W', '--nolinewrap', dest='no_line_wrap', action='store_true', default=False, help='disable line wrap')
 parser.add_argument('-a', '--all', dest='all', action='store_true', default=False, help='Print all log messages')
+parser.add_argument('--ssh', dest='ssh', help='use ssh instead of adb')
 
 args = parser.parse_args()
 min_level = LOG_LEVELS_MAP[args.min_level.upper()]
 
-if subprocess.check_output(['adb', 'devices'], universal_newlines=True).count('device') <= 1:
+if not args.ssh and subprocess.check_output(['adb', 'devices'], universal_newlines=True).count('device') <= 1:
   print('no android device attached')
   sys.exit(-1)
 
@@ -100,8 +101,11 @@ if args.use_device:
 if args.use_emulator:
   base_adb_command.append('-e')
 
+if args.ssh:
+  base_adb_command = ['ssh', args.ssh]
+
 if args.current_app:
-  system_dump_command = base_adb_command + ["shell", "dumpsys", "activity", "recents"]
+  system_dump_command = base_adb_command + ["shell", "dumpsys", "activity", "recents"] if not args.ssh else ["dumpsys", "activity", "recents"]
   system_dump = subprocess.Popen(system_dump_command, stdout=PIPE, stderr=PIPE).communicate()[0]
   dump_str = bytes.decode(system_dump, 'utf-8')
   match_obj = re.search(r"\* Recent #0: Task.* type=([^ ]+) .*A=\d+:([a-zA-Z0-9._$-]+)", dump_str)
@@ -339,7 +343,7 @@ def tag_in_tags_regex(tag, tags):
 def padding_tid(tid: str):
   return ' ' * (TID_WDITH - len(tid)) + tid
 
-ps_command = base_adb_command + ['shell', 'ps']
+ps_command = base_adb_command + ['shell', 'ps'] if not args.ssh else ['ps']
 ps_pid = subprocess.Popen(ps_command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 while True:
   try:
